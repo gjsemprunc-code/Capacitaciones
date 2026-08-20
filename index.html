@@ -74,6 +74,12 @@
 
     .certificate-bg { background-color: #f7fbff !important; }
 
+    /* Pantalla de ingreso: fondo azul institucional.
+       Para aclararlo u oscurecerlo, cambia estos tres tonos. */
+    .pantalla-inicio {
+        background-image: linear-gradient(160deg, #1e3a8a 0%, #2563eb 55%, #1d4ed8 100%);
+    }
+
     /* El certificado se imprime en blanco para no gastar tinta */
     @media print {
         .certificate-bg { background-color: #ffffff !important; }
@@ -905,7 +911,7 @@ const Portal = ({ sesion, esAdmin, onCerrarSesion }) => (
 // VISTA: PANTALLA DE INGRESO
 // ============================================================
 const Login = ({ errorDominio, onIngresar }) => (
-    <div className="min-h-screen flex items-center justify-center p-6">
+    <div className="pantalla-inicio min-h-screen flex items-center justify-center p-6">
         <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center fade-in">
             <div className="flex justify-center mb-5"><Logo clase="h-20" fallback="text-blue-600 text-5xl" /></div>
             <h1 className="text-2xl font-bold mb-2">Portal de Capacitación</h1>
