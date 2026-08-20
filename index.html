@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portal de Capacitación - Ministerio de Ciencia</title>
+<script src="https://unpkg.com/react@17/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@17/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+<style>
+    body {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background-color: #f0f4f8;
+        color: #1a202c;
+    }
+    .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+    .slide-up { animation: slideUp 0.5s ease-out forwards; opacity: 0; transform: translateY(20px); }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes slideUp { to { opacity: 1; transform: translateY(0); } }
+
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+    .certificate-bg {
+        background-color: #ffffff;
+        background-image: url('data:image/svg+xml;utf8,<svg width="40" height="40" xmlns="http://www.w3.org/2000/svg"><path d="M20 0 L40 20 L20 40 L0 20 Z" fill="none" stroke="%23e2e8f0" stroke-width="0.5" opacity="0.5"/></svg>');
+    }
+
+    @media print {
+        body * { visibility: hidden; }
+        #certificate-print-area, #certificate-print-area * { visibility: visible; }
+        #certificate-print-area { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+        .print-hidden { display: none !important; }
+        body { background-color: white; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .fade-in, .slide-up { animation: none; opacity: 1; transform: none; }
+    }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<!-- ============================================================
+     CONFIGURACIÓN — lo único que necesitas editar de este archivo.
+     Los valores están en Supabase: Project Settings → API
+     ============================================================ -->
+<script>
+    window.SUPABASE_URL = "https://lfzyqmztwiamcpmvkupf.supabase.co";
+    window.SUPABASE_ANON_KEY = "sb_publishable_pkIeIqB6EJ71yRNxyaeDcw_tjM_fQKO";
+    window.DOMINIO_PERMITIDO = "minciencia.gob.cl";
+
+    // Catálogo de cursos. Cada "ruta" corresponde a una vista dentro de
+    // esta misma página. Para agregar un curso nuevo: añade el objeto aquí
+    // y su componente en CURSOS_COMPONENTES (más abajo, en el bloque babel).
+    window.CATALOGO_CURSOS = [
+        {
+            id: "probidad-2026",
+            titulo: "Probidad y Conflictos de Interés en el Estado",
+            descripcion: "Curso obligatorio sobre la Ley 20.880: declaración de intereses y patrimonio, fideicomiso ciego y deber de abstención.",
+            icono: "fa-scale-balanced",
+            color: "bg-blue-600",
+            ruta: "#/curso/probidad-2026"
+        }
+    ];
+</script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const supabase = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
+const DOMINIO = window.DOMINIO_PERMITIDO;
+
+function esCorreoValido(email) {
+    return !!email && email.toLowerCase().endsWith("@" + DOMINIO);
+}
+
+const nombreCurso = (id) => {
+    const c = window.CATALOGO_CURSOS.find(c => c.id === id);
+    return c ? c.titulo : id;
+};
+
+const irA = (ruta) => { window.location.hash = ruta; };
+
+// ============================================================
+// CONTENIDO DEL CURSO: PROBIDAD 2026
+// ============================================================
+const CURSO_PROBIDAD_ID = "probidad-2026";
+const VIDEO_URL = "https://drive.google.com/file/d/12lz0lYf72sYxuwQqj68Pn5PbOMe6ZBDM/preview";
+
+const modulesData = [
+    {
+        id: 1,
+        title: "1. Fundamentos: El Principio de Probidad (Arts. 1 y 2)",
+        icon: "fa-scale-balanced",
+        theory: "El principio de probidad exige mantener una conducta funcionaria intachable y un desempeño honesto y leal del cargo, con preeminencia absoluta del interés general sobre el particular. La Ley 20.880 aplica a todo servidor público, sin importar su calidad jurídica (planta, contrata u honorarios asimilados).",
+        application: "Toda decisión, como adjudicación de licitaciones o fondos, debe enfocarse exclusivamente en el bien común del país, sin favoritismos hacia redes cercanas o beneficios propios.",
+        caiggAlert: "El CAIGG establece que la probidad exige actuar proactivamente para prevenir cualquier escenario que ponga en duda la imparcialidad institucional."
+    },
+    {
+        id: 2,
+        title: "2. Sujetos Obligados a Declarar (Art. 4)",
+        icon: "fa-users-viewfinder",
+        theory: "Deben realizar la Declaración de Intereses y Patrimonio (DIP) desde el Presidente de la República hasta el personal de tercer nivel jerárquico. Esto incluye autoridades, jefes de servicio, alcaldes y oficiales de las Fuerzas Armadas y de Orden.",
+        application: "Atención: El Art. 4 N°11 obliga también a personas contratadas a honorarios si perciben regularmente una remuneración igual o superior al promedio mensual de un funcionario de tercer nivel jerárquico.",
+        caiggAlert: "La Unidad de Auditoría Interna debe mantener un catastro actualizado de sujetos obligados para gestionar adecuadamente la matriz de riesgos institucionales."
+    },
+    {
+        id: 3,
+        title: "3. Plazos Legales para la DIP (Art. 5)",
+        icon: "fa-calendar-check",
+        theory: "Los plazos son improrrogables:\n1) Al asumir: 30 días.\n2) Actualización anual: Todo el mes de marzo.\n3) Al cesar funciones: 30 días posteriores a la salida.",
+        application: "Si asumes un cargo en enero, debes declarar en febrero. Independiente de eso, estarás obligado a actualizar la declaración nuevamente en marzo de ese mismo año.",
+        caiggAlert: "Omitir la DIP al cese de funciones es una falta grave. Se recomienda a las áreas de Gestión de Personas incorporar este paso en su checklist de desvinculación."
+    },
+    {
+        id: 4,
+        title: "4. Contenido de la Declaración (Art. 7)",
+        icon: "fa-list-check",
+        theory: "La DIP exige declarar actividades económicas (últimos 12 meses), inmuebles, vehículos, acciones, sociedades y deudas sobre 100 UTM. Además, deben incluirse los bienes del cónyuge si existe sociedad conyugal, o conviviente si hay comunidad de bienes.",
+        application: "Deudas por Pensión de Alimentos: Es obligatorio declararlas sin importar el monto, indicando si se figura en el Registro Nacional de Deudores de Pensiones de Alimentos.",
+        caiggAlert: "Estas declaraciones son públicas (datos abiertos en Contraloría), omitiendo solo datos sensibles como domicilios exactos o números de cuenta bancaria."
+    },
+    {
+        id: 5,
+        title: "5. Control Preventivo vs. Fiscalización (Arts. 9, 10, 11)",
+        icon: "fa-shield-halved",
+        theory: "El Jefe de Servicio y la Auditoría Interna (según CAIGG) tienen el deber de verificar el cumplimiento internamente. La Contraloría General de la República (CGR) ejerce el control externo, cruzando datos con SII y Bancos para formular cargos y sancionar.",
+        application: "El servicio no debe esperar a que Contraloría detecte el incumplimiento; debe reportar activamente a quienes no actualizaron su DIP en marzo.",
+        caiggAlert: "El CAIGG audita el control interno, mientras que la CGR fiscaliza y propone la sanción o multa."
+    },
+    {
+        id: 6,
+        title: "6. Fideicomiso Ciego y Enajenación (Arts. 23-45)",
+        icon: "fa-briefcase",
+        theory: "Autoridades con valores bursátiles sobre 25.000 UF deben constituir un Mandato Especial de Administración de Cartera (Fideicomiso Ciego) en un plazo de 90 días, o vender el exceso. Se corta toda comunicación sobre inversiones. \nAdemás, la ley ordena enajenar en 120 días participaciones en empresas que sean proveedoras o fiscalizadas por la autoridad.",
+        application: "Si una autoridad requiere fondos, el mandatario (banco o corredora) los provee sin informar qué activos liquidó para obtenerlos.",
+        caiggAlert: "Romper el muro de silencio del fideicomiso acarrea multas severas de hasta 1.000 UTM para la autoridad y 2.000 UTM para el mandatario."
+    },
+    {
+        id: 7,
+        title: "7. Instructivo Presidencial N°005/2026: Deber de Abstención",
+        icon: "fa-hand",
+        theory: "El Instructivo ordena que la autoridad debe abstenerse de inmediato frente a conflictos reales, aparentes o potenciales. Involucra interés personal, consanguinidad (4° grado), afinidad (2° grado), amistades íntimas o enemistades, y haber prestado servicios a las partes en los últimos 2 años.",
+        application: "El funcionario debe informar a su jefatura sin dilación para inhabilitarse. La jefatura debe reasignar el asunto inmediatamente a otro servidor público.",
+        caiggAlert: "No hacerlo implica un sumario administrativo automático. Ocultarlo vulnera el principio de probidad gravemente."
+    }
+];
+
+const quizQuestions = [
+    {
+        q: "1. En base a la Ley 20.880, ¿cuál de las siguientes afirmaciones describe mejor el 'Conflicto de Interés'?",
+        options: [
+            "Poseer acciones en cualquier empresa privada mientras se ejerce un cargo público.",
+            "La concurrencia del interés general propio del cargo con un interés particular (económico o no) del funcionario o parientes vinculados a él.",
+            "La situación en la que un funcionario de gobierno milita en un partido político contrario al de su Jefatura.",
+            "Cuando el patrimonio total del funcionario supera las 25.000 UF."
+        ],
+        correct: 1,
+        explanation: "Existe conflicto de intereses en el ejercicio de la función pública cuando concurren a la vez el interés general propio del ejercicio de las funciones con un interés particular, sea o no de carácter económico, de quien ejerce dichas funciones o de los terceros vinculados a él determinados por la ley, o cuando concurren circunstancias que le restan imparcialidad en el ejercicio de sus competencias."
+    },
+    {
+        q: "2. Una profesional a honorarios es contratada por la ANID para liderar temporalmente un programa de innovación. Su sueldo es equivalente al de un Jefe de Departamento (3er Nivel Jerárquico). ¿Debe realizar la DIP?",
+        options: [
+            "No, la ley es exclusiva para funcionarios de planta y contrata.",
+            "Solo debe hacerlo si el contrato a honorarios es superior a 1 año.",
+            "Sí, el Art. 4 N°11 obliga a prestadores a honorarios si su remuneración regular iguala o supera la de un funcionario de 3er nivel jerárquico.",
+            "Debe realizarla, pero de forma voluntaria y simplificada, sin incluir deudas."
+        ],
+        correct: 2,
+        explanation: "Las personas contratadas a honorarios que presten servicios en la Administración del Estado están obligadas a efectuar declaración de intereses y patrimonio cuando perciban regularmente una remuneración igual o superior al promedio mensual de la recibida anualmente por un funcionario que se desempeñe en el tercer nivel jerárquico."
+    },
+    {
+        q: "3. ¿Cuáles son los plazos exactos que estipula el Art. 5 para realizar y actualizar la Declaración de Intereses y Patrimonio?",
+        options: [
+            "Dentro de 60 días de asumir, actualización en Julio, y al momento exacto de dejar el cargo.",
+            "Dentro de 30 días de asumir el cargo, actualización anual durante el mes de Marzo, y dentro de 30 días posteriores al cese de funciones.",
+            "Dentro de 15 días de asumir y actualización cada 2 años en Diciembre.",
+            "Solo al asumir y al momento del cese de funciones, no hay actualizaciones intermedias."
+        ],
+        correct: 1,
+        explanation: "La declaración de intereses y patrimonio deberá efectuarse dentro de los treinta días siguientes de la fecha de asunción del cargo. Además, el declarante deberá actualizarla anualmente, durante el mes de marzo, y dentro de los treinta días posteriores a concluir sus funciones."
+    },
+    {
+        q: "4. En materia de deudas y pasivos, ¿qué obliga explícitamente a declarar el Artículo 7 de la Ley 20.880, sin importar su monto?",
+        options: [
+            "Únicamente los créditos hipotecarios y de consumo bancario.",
+            "Deudas con casas comerciales y retail por sobre 50 UTM.",
+            "Las deudas por concepto de pensión de alimentos, fijados o aprobados por resolución judicial, y si está en el Registro de Deudores.",
+            "Los préstamos informales de dinero entre familiares o amigos."
+        ],
+        correct: 2,
+        explanation: "La declaración deberá contener la enunciación del pasivo, siempre que en su conjunto ascienda a un monto superior a cien unidades tributarias mensuales. Sin perjuicio de lo anterior, deberán declararse las deudas por concepto de pensión de alimentos, provisorios o definitivos, cualquiera sea su monto, fijados o aprobados por resolución judicial, y se deberá informar si registra inscripción vigente en el Registro Nacional de Deudores de Pensiones de Alimentos."
+    },
+    {
+        q: "5. ¿Cuál es el rol diferenciador entre el CAIGG (Consejo de Auditoría Interna) y la Contraloría (CGR) en materia de DIP?",
+        options: [
+            "El CAIGG destituye funcionarios y la CGR solo multa.",
+            "La CGR y el CAIGG tienen las mismas facultades punitivas en los Ministerios.",
+            "El CAIGG aplica multas monetarias, mientras la CGR audita balances.",
+            "El CAIGG promueve el control interno y prevención desde el Ejecutivo. La CGR fiscaliza externamente, formula cargos y propone las multas y sanciones."
+        ],
+        correct: 3,
+        explanation: "La Contraloría General de la República fiscalizará la oportunidad, integridad y veracidad del contenido de la declaración de intereses y patrimonio. Si la persona no la realiza o la efectúa de manera incompleta o inexacta, la Contraloría propondrá al jefe de servicio la aplicación de una multa. Por otro lado, la normativa sobre auditoría interna busca promover el control preventivo desde el Ejecutivo."
+    },
+    {
+        q: "6. Un directivo del Ministerio de Ciencias lleva 5 meses ignorando los avisos y sanciones de la Contraloría por no realizar su DIP. Según el Art. 11, ¿cuál es la consecuencia legal?",
+        options: [
+            "Descuento del 10% de su salario de por vida.",
+            "Se considera falta grave a la probidad, dando lugar a la destitución o cese de funciones, perdiendo su empleo público.",
+            "Anotación de demérito leve en su hoja de vida funcionaria.",
+            "No hay consecuencia mayor, solo se acumula la multa de 50 UTM."
+        ],
+        correct: 1,
+        explanation: "Si el incumplimiento de efectuar o actualizar la declaración de intereses y patrimonio se mantuviera por un período superior a los cuatro meses siguientes a la notificación de la sanción, se considerará falta grave a la probidad y dará lugar a la destitución o cese de funciones del infractor, de acuerdo al estatuto respectivo."
+    },
+    {
+        q: "7. ¿Qué es la 'Enajenación Forzosa' contemplada en el Artículo 45 de la Ley?",
+        options: [
+            "Vender los bienes fiscales obsoletos a través de remates públicos.",
+            "El embargo de los vehículos del funcionario si no paga la multa de Contraloría.",
+            "La obligación de ciertas autoridades de vender su participación en empresas que provean al Estado en su área o sean fiscalizadas por él, en un plazo de 120 días.",
+            "El traspaso de los bienes del funcionario a su cónyuge para evitar declaraciones."
+        ],
+        correct: 2,
+        explanation: "Las autoridades que se señalan en la normativa deberán enajenar a su participación en la propiedad sobre empresas proveedoras de bienes o servicios al Estado o sus organismos, o empresas que presten servicios sujetos a tarifas reguladas o que exploten concesiones, cuando se encuentren vinculadas expresa y directamente con el ámbito de su competencia o sujetas a su fiscalización. La enajenación deberá ser efectuada dentro del plazo de ciento veinte días corridos."
+    },
+    {
+        q: "8. Un Seremi recién nombrado posee un patrimonio en acciones transables en bolsa equivalente a 30.000 UF. ¿Qué le exige la ley (Arts. 23-44)?",
+        options: [
+            "Vender las acciones y donar el dinero al Fisco.",
+            "Constituir un Mandato Especial de Administración de Cartera ('Fideicomiso Ciego') o vender el exceso.",
+            "Solo declarar las acciones en el formulario, sin necesidad de acciones adicionales.",
+            "Renunciar inmediatamente a su cargo de Seremi."
+        ],
+        correct: 1,
+        explanation: "Las altas autoridades que sean titulares de acciones, bonos, debentures y demás títulos de oferta pública representativos de capital o de deuda, cuyo valor total supere las veinticinco mil unidades de fomento, deberán optar por constituir un mandato especial de administración de cartera de valores o vender las acciones y valores, al menos, en lo que exceda a dicho monto."
+    },
+    {
+        q: "9. ¿Debe el funcionario incluir los bienes y actividades económicas de su cónyuge en la DIP?",
+        options: [
+            "Sí, en todos los casos, independientemente del régimen matrimonial.",
+            "No, la privacidad patrimonial del cónyuge es absoluta y está protegida por la Constitución.",
+            "Sí, siempre que estén casados bajo sociedad conyugal (o acuerdo de unión civil con comunidad de bienes). En otros casos es voluntario pero debe incluir actividades que conozca.",
+            "Solo si el cónyuge también trabaja en el sector público."
+        ],
+        correct: 2,
+        explanation: "La declaración de intereses y patrimonio deberá comprender los bienes del cónyuge siempre que estén casados bajo el régimen de sociedad conyugal, y los del conviviente civil del declarante, siempre que hayan pactado régimen de comunidad de bienes. Si el declarante está casado bajo cualquier otro régimen o si es conviviente civil sujeto a un régimen de separación de bienes, dicha declaración será voluntaria respecto de los bienes de dicho cónyuge o conviviente. Sin perjuicio de ello, el declarante deberá incluir en su declaración de intereses las actividades económicas, profesionales o laborales que conozca, de su cónyuge o conviviente civil."
+    },
+    {
+        q: "10. Ante un escenario donde un funcionario investigador debe evaluar la adjudicación de fondos concursables a un proyecto liderado por su ex-jefe directo en el sector privado, ¿Cuál es la conducta proba?",
+        options: [
+            "Evaluarlo pero ser más estricto con él para demostrar que no hay favoritismo.",
+            "Evaluarlo normalmente, ya que la ley solo prohíbe evaluar a familiares consanguíneos.",
+            "Abstenerse del proceso de evaluación e informar a su jefatura sobre el potencial conflicto de interés para salvaguardar la imparcialidad.",
+            "Otorgarle el fondo si el proyecto es técnicamente bueno, sin importar el vínculo."
+        ],
+        correct: 2,
+        explanation: "El principio de abstención consagra que las autoridades y funcionarios deberán abstenerse de intervenir en cualquier procedimiento administrativo si se tiene relación de servicio con persona natural o jurídica interesada directamente en el asunto, o si se le han prestado servicios profesionales en los dos últimos años. Frente a ello, es deber del servidor informarlo a su superior inmediato sin dilación, procediendo a inhabilitarse de conocer y resolver el asunto."
+    },
+    {
+        q: "11. Según el Manual, ¿qué NO pueden contener las instrucciones generales de administración incluidas en la escritura de constitución del Mandato Especial?",
+        options: [
+            "El riesgo y diversificación de las inversiones.",
+            "El plan de liquidación de los valores entregados.",
+            "Disposiciones que ordenen invertir en un rubro o empresa en particular.",
+            "El inventario detallado de los valores que conforman el mandato."
+        ],
+        correct: 2,
+        explanation: "La escritura de constitución del mandato debe contener las instrucciones generales de administración, referidas al plan de liquidación y al riesgo y diversificación de las inversiones. Con todo, dichas instrucciones no podrán referirse a efectuar inversiones en algún rubro o empresa en particular."
+    },
+    {
+        q: "12. ¿Sobre qué materias EXCEPCIONALMENTE se permite la comunicación por escrito entre mandante y mandatario, previa aprobación de la Superintendencia respectiva?",
+        options: [
+            "Sobre el detalle de cada compra y venta de acciones realizada.",
+            "Resultados globales del mandato, giros a beneficio del mandante, pérdida de independencia del mandatario, y declaración y pago de impuestos.",
+            "Sobre cualquier tema, siempre que quede registrado por escrito.",
+            "Solo sobre el monto de la remuneración del mandatario."
+        ],
+        correct: 1,
+        explanation: "Se prohíbe al mandatario comunicarse con el mandante para informarle sobre el destino de su patrimonio o pedir instrucciones. Excepcionalmente se permitirán comunicaciones por escrito previamente aprobadas por la respectiva Superintendencia, las que sólo podrán versar sobre resultados globales del mandato, giros a beneficio del mandante, pérdida de la calidad de independiente del mandatario, y declaración y pago de impuestos."
+    },
+    {
+        q: "13. Según el Instructivo Presidencial N°005/2026 sobre el deber de abstención (Art. 12 LBPA), si un funcionario efectivamente incurre en una causal de abstención pero de todas formas interviene y resuelve el asunto, ¿qué ocurre con el acto administrativo dictado?",
+        options: [
+            "El acto es siempre nulo de pleno derecho, sin excepción.",
+            "No pasa nada con el acto, porque el deber de abstención es meramente formal.",
+            "La infracción no implica necesariamente la invalidez del acto, pero debe ser ponderada fundadamente por la autoridad, y siempre da lugar a responsabilidad administrativa del servidor mediante procedimiento disciplinario.",
+            "El acto se invalida automáticamente y el funcionario queda inhabilitado de por vida para la función pública."
+        ],
+        correct: 2,
+        explanation: "Por expresa disposición de la ley, la infracción al deber de abstención no implicará, necesariamente, la invalidez de los actos en que hayan intervenido. Sin embargo, el incumplimiento dará lugar a la determinación de responsabilidad del servidor. Frente a la eventual infracción, es obligatorio para el servicio respectivo la instrucción de un procedimiento disciplinario."
+    }
+];
+
+// ============================================================
+// VISTA: CURSO DE PROBIDAD
+// ============================================================
+const CursoProbidad = ({ sesion }) => {
+    const [currentView, setCurrentView] = useState('registration');
+    const [userData, setUserData] = useState({
+        name: sesion.user.user_metadata.full_name || sesion.user.user_metadata.name || sesion.user.email,
+        rut: ''
+    });
+    const [formErrors, setFormErrors] = useState({});
+    const [guardando, setGuardando] = useState(false);
+    const [activeModule, setActiveModule] = useState(0);
+    const [currentQIndex, setCurrentQIndex] = useState(0);
+    const [userAnswers, setUserAnswers] = useState([]);
+    const [score, setScore] = useState(0);
+    const [showExp, setShowExp] = useState(false);
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        if (scrollRef.current) scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    }, [activeModule, currentQIndex, currentView]);
+
+    const validateForm = () => {
+        const errors = {};
+        if (!userData.rut.trim()) {
+            errors.rut = 'El RUT es obligatorio.';
+        } else if (!/^[0-9]+-[0-9kK]{1}$/.test(userData.rut)) {
+            errors.rut = 'El RUT debe tener formato válido (ej: 12345678-9).';
+        }
+        setFormErrors(errors);
+        return Object.keys(errors).length === 0;
+    };
+
+    // Guarda la inscripción en Supabase. La política de la base de datos
+    // (ver esquema-supabase.sql) exige además que el correo de la sesión
+    // termine en el dominio institucional, así que esto falla igual si
+    // alguien intenta forzarlo con una cuenta ajena.
+    const guardarInscripcion = async () => {
+        setGuardando(true);
+        await supabase.from('inscripciones').upsert({
+            user_id: sesion.user.id,
+            curso_id: CURSO_PROBIDAD_ID,
+            email: sesion.user.email,
+            nombre: userData.name,
+            rut: userData.rut,
+            iniciado_en: new Date().toISOString()
+        }, { onConflict: 'user_id,curso_id' });
+        setGuardando(false);
+    };
+
+    const guardarCertificado = async (puntaje, aprobado) => {
+        await supabase.from('certificados').upsert({
+            user_id: sesion.user.id,
+            curso_id: CURSO_PROBIDAD_ID,
+            email: sesion.user.email,
+            nombre: userData.name,
+            rut: userData.rut,
+            puntaje: puntaje,
+            aprobado: aprobado,
+            emitido_en: new Date().toISOString()
+        }, { onConflict: 'user_id,curso_id' });
+    };
+
+    const handleRegistrationSubmit = async (e) => {
+        e.preventDefault();
+        if (validateForm()) {
+            await guardarInscripcion();
+            setCurrentView('welcome');
+        }
+    };
+
+    const handleStartCourse = () => {
+        setCurrentView('modules');
+        setActiveModule(-1);
+    };
+
+    const nextModule = () => {
+        if (activeModule < modulesData.length - 1) {
+            setActiveModule(activeModule + 1);
+        } else {
+            setCurrentView('quiz');
+            setCurrentQIndex(0);
+            setUserAnswers([]);
+            setScore(0);
+            setShowExp(false);
+        }
+    };
+
+    const prevModule = () => {
+        if (activeModule > -1) setActiveModule(activeModule - 1);
+    };
+
+    const handleAnswerSelection = (optionIndex) => {
+        if (showExp) return;
+
+        const isCorrect = optionIndex === quizQuestions[currentQIndex].correct;
+        if (isCorrect) setScore(score + 1);
+
+        const newAnswers = [...userAnswers];
+        newAnswers[currentQIndex] = optionIndex;
+        setUserAnswers(newAnswers);
+        setShowExp(true);
+    };
+
+    const nextQuestion = () => {
+        setShowExp(false);
+        if (currentQIndex < quizQuestions.length - 1) {
+            setCurrentQIndex(currentQIndex + 1);
+        } else {
+            setCurrentView('results');
+            const percentage = Math.round((score / quizQuestions.length) * 100);
+            guardarCertificado(percentage, percentage >= 80);
+        }
+    };
+
+    const renderRegistration = () => (
+        <div className="flex flex-col items-center justify-center min-h-[70vh] p-8 text-center slide-up w-full max-w-md mx-auto">
+            <div className="bg-white p-8 rounded-3xl shadow-2xl border border-gray-100 w-full relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-2 bg-blue-600"></div>
+                <h2 className="text-2xl font-bold text-gray-800 mb-2">Confirma tus datos</h2>
+                <p className="text-gray-500 text-sm mb-6">Sesión iniciada como <strong>{sesion.user.email}</strong>. Solo falta tu RUT para emitir el certificado.</p>
+
+                <form onSubmit={handleRegistrationSubmit} className="space-y-5 text-left">
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">Nombre Completo</label>
+                        <input type="text" value={userData.name} readOnly className="w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-100 text-gray-500" />
+                        <p className="text-xs text-gray-400 mt-1">Este nombre viene de tu cuenta de Google institucional.</p>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">RUT (sin puntos, con guion)</label>
+                        <input type="text" value={userData.rut} onChange={(e) => setUserData({...userData, rut: e.target.value})} placeholder="Ej: 12345678-9" className={`w-full px-4 py-3 rounded-xl border ${formErrors.rut ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:border-blue-500`} />
+                        {formErrors.rut && <p className="text-red-500 text-xs mt-1">{formErrors.rut}</p>}
+                    </div>
+                    <button type="submit" disabled={guardando} className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl mt-4 disabled:opacity-60">
+                        {guardando ? 'Guardando…' : <>Continuar <i className="fa-solid fa-arrow-right ml-2"></i></>}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+
+    const renderWelcome = () => (
+        <div className="flex flex-col items-center justify-center min-h-[70vh] p-8 text-center slide-up">
+            <h1 className="text-4xl font-extrabold text-gray-800 mb-2">Probidad en el Estado de Chile</h1>
+            <p className="text-blue-600 font-semibold mb-6">Bienvenido/a, {userData.name}</p>
+            <p className="text-xl text-gray-600 max-w-3xl mb-8">El curso cuenta con un <strong>Video Principal</strong> obligatorio y 7 módulos complementarios sobre el deber de abstención, la DIP y las normativas de Contraloría.</p>
+            <button onClick={handleStartCourse} className="bg-blue-700 hover:bg-blue-800 text-white font-bold py-4 px-10 rounded-full">Comenzar Curso <i className="fa-solid fa-play ml-2"></i></button>
+        </div>
+    );
+
+    const renderModules = () => {
+        if (activeModule === -1) {
+            return (
+                <div className="max-w-4xl mx-auto w-full slide-up">
+                    <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 p-8">
+                        <h2 className="text-2xl font-bold text-gray-800 mb-4"><i className="fa-brands fa-youtube text-red-600 mr-2"></i> Clase Magistral: Probidad y Conflictos de Intereses</h2>
+                        <div className="bg-black rounded-xl overflow-hidden relative" style={{ paddingBottom: '56.25%', height: 0 }}>
+                            <iframe className="absolute top-0 left-0 w-full h-full" src={VIDEO_URL} frameBorder="0" allowFullScreen></iframe>
+                        </div>
+                        <div className="mt-8 flex justify-end">
+                            <button onClick={nextModule} className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold">Continuar a Módulos Complementarios <i className="fa-solid fa-arrow-right ml-2"></i></button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const mod = modulesData[activeModule];
+        const progress = ((activeModule + 1) / modulesData.length) * 100;
+
+        return (
+            <div className="max-w-4xl mx-auto w-full slide-up">
+                <div className="mb-8">
+                    <div className="w-full bg-gray-200 rounded-full h-3"><div className="bg-blue-600 h-3 rounded-full" style={{ width: `${progress}%` }}></div></div>
+                </div>
+                <div className="bg-white rounded-2xl shadow-xl border border-gray-100">
+                    <div className="bg-slate-800 p-6 flex items-center gap-4">
+                        <div className="bg-white/20 p-3 rounded-lg text-white"><i className={`fa-solid ${mod.icon} text-3xl`}></i></div>
+                        <h2 className="text-2xl font-bold text-white">{mod.title}</h2>
+                    </div>
+                    <div className="p-8 space-y-6">
+                        <p className="text-gray-700 text-lg whitespace-pre-line">{mod.theory}</p>
+                        <div className="bg-blue-50 border-l-4 border-blue-500 p-4"><p className="text-blue-900 italic">" {mod.application} "</p></div>
+                        <div className="bg-amber-50 border border-amber-200 p-4 flex gap-4">
+                            <i className="fa-solid fa-triangle-exclamation text-amber-500 text-2xl"></i>
+                            <p className="text-amber-900 text-sm">{mod.caiggAlert}</p>
+                        </div>
+                    </div>
+                    <div className="bg-gray-50 p-5 flex justify-between">
+                        <button onClick={prevModule} className="text-blue-600 font-semibold"><i className="fa-solid fa-arrow-left mr-2"></i> Anterior</button>
+                        <button onClick={nextModule} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold">{activeModule === modulesData.length - 1 ? 'Iniciar Evaluación' : 'Siguiente'} <i className="fa-solid fa-arrow-right ml-2"></i></button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const renderQuiz = () => {
+        const q = quizQuestions[currentQIndex];
+        const hasAnswered = showExp;
+        const isUserCorrect = userAnswers[currentQIndex] === q.correct;
+
+        return (
+            <div className="max-w-3xl mx-auto w-full slide-up">
+                <div className="bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-100 p-8">
+                    <h2 className="text-2xl font-bold text-gray-800 mb-6 leading-relaxed">
+                        {q.q}
+                    </h2>
+
+                    <div className="space-y-4 mb-8">
+                        {q.options.map((opt, idx) => {
+                            let btnStyle = "border-gray-200 text-gray-700 hover:border-indigo-400 hover:bg-indigo-50";
+                            let icon = null;
+
+                            // Si ya respondió, solo aplicamos colores a LA OPCIÓN QUE ÉL ELIGIÓ
+                            // para que NO sepa cuál es la correcta si se equivoca.
+                            if (hasAnswered) {
+                                if (idx === userAnswers[currentQIndex]) {
+                                    if (idx === q.correct) {
+                                        btnStyle = "border-green-500 bg-green-50 text-green-800 ring-2 ring-green-500 shadow-sm";
+                                        icon = <i className="fa-solid fa-circle-check text-green-600 text-xl"></i>;
+                                    } else {
+                                        btnStyle = "border-red-500 bg-red-50 text-red-800 ring-2 ring-red-500 shadow-sm";
+                                        icon = <i className="fa-solid fa-circle-xmark text-red-600 text-xl"></i>;
+                                    }
+                                } else {
+                                    btnStyle = "border-gray-200 text-gray-400 opacity-50 cursor-not-allowed";
+                                }
+                            }
+
+                            return (
+                                <button
+                                    key={idx}
+                                    onClick={() => handleAnswerSelection(idx)}
+                                    disabled={hasAnswered}
+                                    className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-200 flex justify-between items-center gap-4 ${btnStyle}`}
+                                >
+                                    <span className="leading-relaxed">{opt}</span>
+                                    {icon}
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {hasAnswered && (
+                        <div className={`p-5 rounded-lg mb-6 fade-in border-l-4 ${isUserCorrect ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+                            <h4 className={`font-bold mb-2 flex items-center ${isUserCorrect ? 'text-green-800' : 'text-red-800'}`}>
+                                <i className={`fa-solid ${isUserCorrect ? 'fa-thumbs-up' : 'fa-circle-exclamation'} mr-2`}></i>
+                                {isUserCorrect ? '¡Respuesta Correcta!' : 'Respuesta Incorrecta'}
+                            </h4>
+                            <p className="text-gray-700 text-sm leading-relaxed">
+                                <strong>Información Relevante:</strong> {q.explanation}
+                            </p>
+                        </div>
+                    )}
+
+                    {hasAnswered && (
+                        <div className="text-right border-t border-gray-100 pt-6">
+                            <button
+                                onClick={nextQuestion}
+                                className="bg-indigo-600 hover:bg-indigo-700 text-white px-8 py-3 rounded-lg font-bold shadow-md transition-all transform hover:-translate-y-0.5"
+                            >
+                                {currentQIndex === quizQuestions.length - 1 ? 'Ver Resultados Finales' : 'Siguiente Pregunta'} <i className="fa-solid fa-arrow-right ml-2"></i>
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const renderResults = () => {
+        const percentage = Math.round((score / quizQuestions.length) * 100);
+        const passed = percentage >= 80;
+        return (
+            <div className="max-w-2xl mx-auto w-full text-center slide-up bg-white rounded-3xl shadow-2xl p-10">
+                <h2 className="text-4xl font-extrabold mb-4">Resultados</h2>
+                <div className={`text-6xl font-black mb-4 ${passed ? 'text-green-600' : 'text-red-600'}`}>{percentage}%</div>
+
+                {passed ? (
+                    <>
+                        <p className="text-gray-600 mb-8 font-medium">¡Felicitaciones! Has demostrado un nivel de comprensión superior al 80% requerido.</p>
+                        <button onClick={() => setCurrentView('certificate')} className="bg-green-600 text-white px-8 py-4 rounded-full font-bold"><i className="fa-solid fa-certificate mr-2"></i> Obtener Certificado</button>
+                    </>
+                ) : (
+                    <>
+                        <p className="text-red-600 mb-8 font-medium">Lamentablemente no has alcanzado el 80% mínimo de aprobación requerido para este curso obligatorio. Debes volver a realizarlo.</p>
+                        <button onClick={() => { setCurrentView('modules'); setActiveModule(-1); setScore(0); setCurrentQIndex(0); setShowExp(false); }} className="bg-gray-800 text-white px-8 py-4 rounded-full font-bold"><i className="fa-solid fa-rotate-right mr-2"></i> Volver a Iniciar Curso</button>
+                    </>
+                )}
+            </div>
+        );
+    };
+
+    const renderCertificate = () => (
+        <div className="w-full max-w-4xl mx-auto flex flex-col items-center slide-up pb-10">
+            <div className="w-full flex justify-end mb-6 print-hidden">
+                <button onClick={() => window.print()} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold shadow"><i className="fa-solid fa-print mr-2"></i> Imprimir / PDF</button>
+            </div>
+            <div id="certificate-print-area" className="w-full bg-white p-12 border-8 border-double border-blue-900 shadow-2xl text-center certificate-bg">
+                <h1 className="text-5xl font-serif text-gray-800 mb-8 uppercase">Certificado de Aprobación</h1>
+                <p className="text-gray-500 uppercase tracking-widest text-sm mb-12">Se otorga a:</p>
+                <h2 className="text-4xl font-bold text-blue-900 mb-2">{userData.name.toUpperCase()}</h2>
+                <p className="text-gray-600 font-medium mb-10 tracking-wider">RUT: {userData.rut}</p>
+                <p className="text-lg text-gray-700 leading-relaxed mb-16">Por haber aprobado satisfactoriamente el curso avanzado de capacitación sobre la <strong>Ley 20.880 y Probidad en la Función Pública</strong>.</p>
+                <div className="text-yellow-500 text-6xl drop-shadow-md"><i className="fa-solid fa-certificate"></i></div>
+            </div>
+        </div>
+    );
+
+    return (
+        <div className="min-h-screen flex flex-col h-screen overflow-hidden">
+            <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center print-hidden">
+                <a href="#/" className="font-bold hover:text-blue-300"><i className="fa-solid fa-arrow-left mr-2"></i>Portal de Capacitación</a>
+                <span className="text-sm bg-slate-800 px-3 py-1 rounded-full">{sesion.user.email}</span>
+            </header>
+            <main ref={scrollRef} className="flex-grow overflow-y-auto p-4 md:p-8 flex items-start justify-center scrollbar-hide">
+                {currentView === 'registration' && renderRegistration()}
+                {currentView === 'welcome' && renderWelcome()}
+                {currentView === 'modules' && renderModules()}
+                {currentView === 'quiz' && renderQuiz()}
+                {currentView === 'results' && renderResults()}
+                {currentView === 'certificate' && renderCertificate()}
+            </main>
+        </div>
+    );
+};
+
+// Registro de cursos: relaciona el id del catálogo con su componente.
+const CURSOS_COMPONENTES = {
+    "probidad-2026": CursoProbidad
+};
+
+// ============================================================
+// VISTA: PANEL DE ADMINISTRADOR
+// ============================================================
+const PanelAdmin = ({ sesion }) => {
+    const [estado, setEstado] = useState("verificando"); // verificando | sin-acceso | listo
+    const [inscripciones, setInscripciones] = useState([]);
+    const [certificados, setCertificados] = useState([]);
+    const [filtroCurso, setFiltroCurso] = useState("todos");
+
+    useEffect(() => {
+        (async () => {
+            const { data: perfil } = await supabase
+                .from("perfiles")
+                .select("es_admin")
+                .eq("id", sesion.user.id)
+                .single();
+
+            if (!perfil || !perfil.es_admin) {
+                setEstado("sin-acceso");
+                return;
+            }
+
+            const [{ data: insc }, { data: certs }] = await Promise.all([
+                supabase.from("inscripciones").select("*").order("iniciado_en", { ascending: false }),
+                supabase.from("certificados").select("*").order("emitido_en", { ascending: false })
+            ]);
+            setInscripciones(insc || []);
+            setCertificados(certs || []);
+            setEstado("listo");
+        })();
+    }, []);
+
+    if (estado === "verificando") {
+        return <div className="min-h-screen flex items-center justify-center text-gray-400">Verificando acceso…</div>;
+    }
+
+    if (estado === "sin-acceso") {
+        return (
+            <div className="min-h-screen flex items-center justify-center p-6">
+                <div className="bg-white p-10 rounded-3xl shadow-xl max-w-md text-center">
+                    <div className="text-red-500 text-4xl mb-4"><i className="fa-solid fa-lock"></i></div>
+                    <h1 className="text-xl font-bold mb-2">Sin acceso de administrador</h1>
+                    <p className="text-gray-500 mb-6">Tu cuenta no tiene permisos para ver este panel.</p>
+                    <a href="#/" className="text-blue-600 font-semibold"><i className="fa-solid fa-arrow-left mr-2"></i>Volver al portal</a>
+                </div>
+            </div>
+        );
+    }
+
+    const cursosConDatos = [...new Set(inscripciones.map(i => i.curso_id))];
+    const inscFiltradas = filtroCurso === "todos" ? inscripciones : inscripciones.filter(i => i.curso_id === filtroCurso);
+
+    const certificadoDe = (userId, cursoId) =>
+        certificados.find(c => c.user_id === userId && c.curso_id === cursoId);
+
+    return (
+        <div className="min-h-screen">
+            <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
+                <a href="#/" className="font-bold hover:text-blue-300"><i className="fa-solid fa-arrow-left mr-2"></i>Panel de Administrador</a>
+            </header>
+
+            <main className="max-w-6xl mx-auto p-6 md:p-10">
+                <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                    <h2 className="text-2xl font-bold text-gray-800">Inscritos y certificados</h2>
+                    <select value={filtroCurso} onChange={e => setFiltroCurso(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="todos">Todos los cursos</option>
+                        {cursosConDatos.map(id => <option key={id} value={id}>{nombreCurso(id)}</option>)}
+                    </select>
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-md overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+                            <tr>
+                                <th className="text-left px-4 py-3">Nombre</th>
+                                <th className="text-left px-4 py-3">Correo</th>
+                                <th className="text-left px-4 py-3">RUT</th>
+                                <th className="text-left px-4 py-3">Curso</th>
+                                <th className="text-left px-4 py-3">Inscrito</th>
+                                <th className="text-left px-4 py-3">Resultado</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {inscFiltradas.map(i => {
+                                const cert = certificadoDe(i.user_id, i.curso_id);
+                                return (
+                                    <tr key={i.id} className="border-t border-gray-100">
+                                        <td className="px-4 py-3 font-medium text-gray-800">{i.nombre}</td>
+                                        <td className="px-4 py-3 text-gray-500">{i.email}</td>
+                                        <td className="px-4 py-3 text-gray-500">{i.rut}</td>
+                                        <td className="px-4 py-3 text-gray-500">{nombreCurso(i.curso_id)}</td>
+                                        <td className="px-4 py-3 text-gray-500">{new Date(i.iniciado_en).toLocaleDateString("es-CL")}</td>
+                                        <td className="px-4 py-3">
+                                            {!cert && <span className="text-gray-400">En curso</span>}
+                                            {cert && cert.aprobado && <span className="text-green-600 font-semibold"><i className="fa-solid fa-circle-check mr-1"></i>Aprobado ({cert.puntaje}%)</span>}
+                                            {cert && !cert.aprobado && <span className="text-red-500 font-semibold"><i className="fa-solid fa-circle-xmark mr-1"></i>Reprobado ({cert.puntaje}%)</span>}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {inscFiltradas.length === 0 && (
+                                <tr><td colSpan="6" className="px-4 py-10 text-center text-gray-400">Aún no hay inscritos.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </main>
+        </div>
+    );
+};
+
+// ============================================================
+// VISTA: PORTAL (listado de cursos)
+// ============================================================
+const Portal = ({ sesion, esAdmin, onCerrarSesion }) => (
+    <div className="min-h-screen">
+        <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
+            <h1 className="font-bold"><i className="fa-solid fa-building-columns mr-2"></i>Portal de Capacitación</h1>
+            <div className="flex items-center gap-4 text-sm">
+                <span className="hidden sm:inline text-slate-300">{sesion.user.email}</span>
+                {esAdmin && (
+                    <a href="#/admin" className="bg-blue-700 hover:bg-blue-600 px-3 py-1.5 rounded-full">
+                        <i className="fa-solid fa-gauge mr-1"></i>Panel admin
+                    </a>
+                )}
+                <button onClick={onCerrarSesion} className="bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-full">
+                    <i className="fa-solid fa-arrow-right-from-bracket mr-1"></i>Salir
+                </button>
+            </div>
+        </header>
+
+        <main className="max-w-5xl mx-auto p-6 md:p-10">
+            <h2 className="text-2xl font-bold text-gray-800 mb-1">Cursos disponibles</h2>
+            <p className="text-gray-500 mb-8">Bienvenido/a, {sesion.user.user_metadata.full_name || sesion.user.email}.</p>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {window.CATALOGO_CURSOS.map(curso => (
+                    <a key={curso.id} href={curso.ruta} className="bg-white rounded-2xl shadow-md hover:shadow-xl transition-shadow p-6 flex flex-col fade-in">
+                        <div className={`${curso.color} text-white w-12 h-12 rounded-xl flex items-center justify-center text-xl mb-4`}>
+                            <i className={`fa-solid ${curso.icono}`}></i>
+                        </div>
+                        <h3 className="font-bold text-gray-800 mb-2">{curso.titulo}</h3>
+                        <p className="text-sm text-gray-500 flex-grow">{curso.descripcion}</p>
+                        <span className="mt-4 text-blue-600 font-semibold text-sm">Ingresar al curso <i className="fa-solid fa-arrow-right ml-1"></i></span>
+                    </a>
+                ))}
+            </div>
+        </main>
+    </div>
+);
+
+// ============================================================
+// VISTA: PANTALLA DE INGRESO
+// ============================================================
+const Login = ({ errorDominio, onIngresar }) => (
+    <div className="min-h-screen flex items-center justify-center p-6">
+        <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center fade-in">
+            <div className="text-blue-600 text-5xl mb-4"><i className="fa-solid fa-building-columns"></i></div>
+            <h1 className="text-2xl font-bold mb-2">Portal de Capacitación</h1>
+            <p className="text-gray-500 mb-8">Ministerio de Ciencia, Tecnología, Conocimiento e Innovación</p>
+
+            {errorDominio && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-4 mb-6 text-left">
+                    <i className="fa-solid fa-circle-exclamation mr-2"></i>
+                    Esa cuenta de Google no pertenece al dominio <strong>@{DOMINIO}</strong>. Inicia sesión con tu correo institucional.
+                </div>
+            )}
+
+            <button onClick={onIngresar} className="w-full flex items-center justify-center gap-3 border-2 border-gray-200 hover:border-gray-300 rounded-xl py-3 font-semibold text-gray-700 transition-colors">
+                <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.9 32.6 29.4 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16 18.9 13 24 13c3.1 0 5.9 1.2 8 3.1l5.7-5.7C34.5 6.1 29.5 4 24 4c-7.7 0-14.3 4.4-17.7 10.7z"/><path fill="#4CAF50" d="M24 44c5.3 0 10.1-2 13.7-5.4l-6.3-5.3C29.4 35 26.8 36 24 36c-5.4 0-9.9-3.4-11.5-8.2l-6.5 5C9.6 39.5 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.2 5.7l6.3 5.3C39.9 36.9 44 31 44 24c0-1.3-.1-2.7-.4-3.5z"/></svg>
+                Ingresar con Google
+            </button>
+            <p className="text-xs text-gray-400 mt-6">Acceso exclusivo para funcionarios con correo @{DOMINIO}</p>
+        </div>
+    </div>
+);
+
+// ============================================================
+// APLICACIÓN: sesión + navegación interna por hash
+//   #/                      → portal
+//   #/curso/probidad-2026   → curso
+//   #/admin                 → panel de administrador
+// ============================================================
+function leerRuta() {
+    const h = (window.location.hash || "").replace(/^#/, "");
+    if (h.startsWith("/curso/")) {
+        const id = h.slice("/curso/".length);
+        if (CURSOS_COMPONENTES[id]) return { vista: "curso", cursoId: id };
+        return { vista: "portal" };
+    }
+    if (h === "/admin") return { vista: "admin" };
+    return { vista: "portal" };
+}
+
+const App = () => {
+    const [cargando, setCargando] = useState(true);
+    const [sesion, setSesion] = useState(null);
+    const [errorDominio, setErrorDominio] = useState(false);
+    const [esAdmin, setEsAdmin] = useState(false);
+    const [ruta, setRuta] = useState(leerRuta());
+
+    useEffect(() => {
+        const onHashChange = () => setRuta(leerRuta());
+        window.addEventListener("hashchange", onHashChange);
+        return () => window.removeEventListener("hashchange", onHashChange);
+    }, []);
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data }) => {
+            manejarSesion(data.session);
+            setCargando(false);
+        });
+
+        const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+            manejarSesion(session);
+        });
+        return () => listener.subscription.unsubscribe();
+    }, []);
+
+    const manejarSesion = async (session) => {
+        if (!session) { setSesion(null); return; }
+
+        const email = session.user.email || "";
+        if (!esCorreoValido(email)) {
+            // Defensa en el cliente. La defensa real está en la base de datos
+            // (ver esquema-supabase.sql): esa cuenta jamás debería poder
+            // guardar datos aunque alguien manipule este JavaScript.
+            setErrorDominio(true);
+            await supabase.auth.signOut();
+            setSesion(null);
+            return;
+        }
+        setErrorDominio(false);
+        setSesion(session);
+
+        await supabase.from("perfiles").upsert({
+            id: session.user.id,
+            email: email,
+            nombre_completo: session.user.user_metadata.full_name || session.user.user_metadata.name || "",
+            ultimo_ingreso: new Date().toISOString()
+        });
+
+        const { data: perfil } = await supabase.from("perfiles").select("es_admin").eq("id", session.user.id).single();
+        setEsAdmin(!!(perfil && perfil.es_admin));
+    };
+
+    const iniciarSesion = async () => {
+        setErrorDominio(false);
+        await supabase.auth.signInWithOAuth({
+            provider: "google",
+            options: {
+                // "hd" le pide a Google que solo muestre/permita cuentas de ese
+                // dominio en el selector. Es una ayuda de UX, no una barrera de
+                // seguridad real — por eso igual validamos en el cliente y en la BD.
+                queryParams: { hd: DOMINIO, prompt: "select_account" },
+                redirectTo: window.location.href.split("#")[0]
+            }
+        });
+    };
+
+    const cerrarSesion = async () => {
+        await supabase.auth.signOut();
+        setSesion(null);
+        irA("#/");
+    };
+
+    if (cargando) {
+        return <div className="min-h-screen flex items-center justify-center text-gray-400">Cargando…</div>;
+    }
+
+    if (!sesion) {
+        return <Login errorDominio={errorDominio} onIngresar={iniciarSesion} />;
+    }
+
+    if (ruta.vista === "admin") {
+        return <PanelAdmin sesion={sesion} />;
+    }
+
+    if (ruta.vista === "curso") {
+        const Componente = CURSOS_COMPONENTES[ruta.cursoId];
+        return <Componente key={ruta.cursoId} sesion={sesion} />;
+    }
+
+    return <Portal sesion={sesion} esAdmin={esAdmin} onCerrarSesion={cerrarSesion} />;
+};
+
+ReactDOM.render(<App />, document.getElementById("root"));
+</script>
+</body>
+</html>
