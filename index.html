@@ -41,6 +41,43 @@
     @media (prefers-reduced-motion: reduce) {
         .fade-in, .slide-up { animation: none; opacity: 1; transform: none; }
     }
+
+    /* ============================================================
+       PALETA AZUL SUAVE
+       Reemplaza los fondos blancos por tonos azulados claros.
+       Para ajustar la intensidad, modifica estas tres variables:
+       más cerca del blanco = más suave; más saturado = más azul.
+       ============================================================ */
+    :root {
+        --azul-fondo:   #e6eef8;   /* fondo general de la página */
+        --azul-tarjeta: #f3f8fe;   /* tarjetas y paneles         */
+        --azul-tenue:   #e8f0fa;   /* encabezados de tabla       */
+        --azul-borde:   #d5e3f2;   /* bordes y separadores       */
+        --azul-campo:   #fbfdff;   /* campos de formulario       */
+    }
+
+    body {
+        background-color: var(--azul-fondo);
+        background-image: linear-gradient(180deg, #edf3fa 0%, var(--azul-fondo) 55%, #dde8f5 100%);
+        background-attachment: fixed;
+    }
+
+    .bg-white       { background-color: var(--azul-tarjeta) !important; }
+    .bg-gray-50     { background-color: var(--azul-tenue) !important; }
+    .bg-gray-100    { background-color: #e4ecf7 !important; }
+    .border-gray-100 { border-color: var(--azul-borde) !important; }
+    .border-gray-200 { border-color: #cddef0 !important; }
+    .border-gray-300 { border-color: #bcd2e8 !important; }
+
+    input, select, textarea { background-color: var(--azul-campo); }
+    input[readonly] { background-color: #e4ecf7; }
+
+    .certificate-bg { background-color: #f7fbff !important; }
+
+    /* El certificado se imprime en blanco para no gastar tinta */
+    @media print {
+        .certificate-bg { background-color: #ffffff !important; }
+    }
 </style>
 </head>
 <body>
@@ -54,6 +91,12 @@
     window.SUPABASE_URL = "https://lfzyqmztwiamcpmvkupf.supabase.co";
     window.SUPABASE_ANON_KEY = "sb_publishable_pkIeIqB6EJ71yRNxyaeDcw_tjM_fQKO";
     window.DOMINIO_PERMITIDO = "minciencia.gob.cl";
+
+    // Logo institucional. Sube el archivo de imagen al mismo repositorio,
+    // junto a este index.html, y escribe aquí su nombre exacto.
+    // Si el archivo no existe o se escribe mal, la página muestra
+    // automáticamente el ícono de respaldo y no se rompe nada.
+    window.LOGO_URL = "logo-minciencia.png";
 
     // Catálogo de cursos. Cada "ruta" corresponde a una vista dentro de
     // esta misma página. Para agregar un curso nuevo: añade el objeto aquí
@@ -86,6 +129,65 @@ const nombreCurso = (id) => {
 };
 
 const irA = (ruta) => { window.location.hash = ruta; };
+
+// ============================================================
+// LOGO INSTITUCIONAL
+// Muestra la imagen definida en window.LOGO_URL. Si el archivo no
+// se encuentra, cae de vuelta al ícono para que nunca quede un
+// recuadro roto en pantalla.
+// ============================================================
+const Logo = ({ clase = "h-12", fallback = "text-blue-600 text-5xl" }) => {
+    const [falla, setFalla] = useState(false);
+
+    if (!window.LOGO_URL || falla) {
+        return <div className={fallback}><i className="fa-solid fa-building-columns"></i></div>;
+    }
+
+    return (
+        <img
+            src={window.LOGO_URL}
+            alt="Ministerio de Ciencia, Tecnología, Conocimiento e Innovación"
+            className={`${clase} w-auto object-contain`}
+            onError={() => setFalla(true)}
+        />
+    );
+};
+
+// ============================================================
+// RUT CHILENO
+// formatearRut: filtra lo que se escribe en el campo. Solo acepta
+//   dígitos, y la letra K únicamente como dígito verificador final
+//   (es válida por ley: le corresponde a ~1 de cada 11 personas).
+//   Inserta el guion solo.
+// rutValido: verifica el dígito verificador con el algoritmo
+//   módulo 11, así se detectan RUT inventados o mal tipeados.
+// ============================================================
+const formatearRut = (valor) => {
+    let limpio = valor.replace(/[^0-9kK]/g, "").toUpperCase();
+    limpio = limpio.replace(/K(?=.)/g, "");     // la K solo puede ir al final
+    if (limpio.length > 9) limpio = limpio.slice(0, 9);
+    if (limpio.length <= 1) return limpio;
+    return limpio.slice(0, -1) + "-" + limpio.slice(-1);
+};
+
+const rutValido = (rut) => {
+    const limpio = (rut || "").replace(/[.\-]/g, "").toUpperCase();
+    if (!/^[0-9]{7,8}[0-9K]$/.test(limpio)) return false;
+
+    const cuerpo = limpio.slice(0, -1);
+    const dv = limpio.slice(-1);
+
+    let suma = 0;
+    let mult = 2;
+    for (let i = cuerpo.length - 1; i >= 0; i--) {
+        suma += parseInt(cuerpo[i], 10) * mult;
+        mult = mult === 7 ? 2 : mult + 1;
+    }
+
+    const resto = 11 - (suma % 11);
+    const dvEsperado = resto === 11 ? "0" : resto === 10 ? "K" : String(resto);
+    return dv === dvEsperado;
+};
 
 // ============================================================
 // CONTENIDO DEL CURSO: PROBIDAD 2026
@@ -324,8 +426,8 @@ const CursoProbidad = ({ sesion }) => {
         const errors = {};
         if (!userData.rut.trim()) {
             errors.rut = 'El RUT es obligatorio.';
-        } else if (!/^[0-9]+-[0-9kK]{1}$/.test(userData.rut)) {
-            errors.rut = 'El RUT debe tener formato válido (ej: 12345678-9).';
+        } else if (!rutValido(userData.rut)) {
+            errors.rut = 'El RUT no es válido. Revisa el número y el dígito verificador.';
         }
         setFormErrors(errors);
         return Object.keys(errors).length === 0;
@@ -428,8 +530,19 @@ const CursoProbidad = ({ sesion }) => {
                     </div>
                     <div>
                         <label className="block text-sm font-semibold text-gray-700 mb-1">RUT (sin puntos, con guion)</label>
-                        <input type="text" value={userData.rut} onChange={(e) => setUserData({...userData, rut: e.target.value})} placeholder="Ej: 12345678-9" className={`w-full px-4 py-3 rounded-xl border ${formErrors.rut ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:border-blue-500`} />
-                        {formErrors.rut && <p className="text-red-500 text-xs mt-1">{formErrors.rut}</p>}
+                        <input
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            maxLength={10}
+                            value={userData.rut}
+                            onChange={(e) => setUserData({...userData, rut: formatearRut(e.target.value)})}
+                            placeholder="Ej: 12345678-9"
+                            className={`w-full px-4 py-3 rounded-xl border ${formErrors.rut ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:border-blue-500`}
+                        />
+                        {formErrors.rut
+                            ? <p className="text-red-500 text-xs mt-1">{formErrors.rut}</p>
+                            : <p className="text-xs text-gray-400 mt-1">Solo números. El guion se agrega solo.</p>}
                     </div>
                     <button type="submit" disabled={guardando} className="w-full bg-blue-700 hover:bg-blue-800 text-white font-bold py-3 px-4 rounded-xl mt-4 disabled:opacity-60">
                         {guardando ? 'Guardando…' : <>Continuar <i className="fa-solid fa-arrow-right ml-2"></i></>}
@@ -598,6 +711,7 @@ const CursoProbidad = ({ sesion }) => {
                 <button onClick={() => window.print()} className="bg-blue-600 text-white px-6 py-2 rounded-lg font-bold shadow"><i className="fa-solid fa-print mr-2"></i> Imprimir / PDF</button>
             </div>
             <div id="certificate-print-area" className="w-full bg-white p-12 border-8 border-double border-blue-900 shadow-2xl text-center certificate-bg">
+                <div className="flex justify-center mb-6"><Logo clase="h-24" fallback="text-blue-900 text-5xl" /></div>
                 <h1 className="text-5xl font-serif text-gray-800 mb-8 uppercase">Certificado de Aprobación</h1>
                 <p className="text-gray-500 uppercase tracking-widest text-sm mb-12">Se otorga a:</p>
                 <h2 className="text-4xl font-bold text-blue-900 mb-2">{userData.name.toUpperCase()}</h2>
@@ -748,7 +862,12 @@ const PanelAdmin = ({ sesion }) => {
 const Portal = ({ sesion, esAdmin, onCerrarSesion }) => (
     <div className="min-h-screen">
         <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
-            <h1 className="font-bold"><i className="fa-solid fa-building-columns mr-2"></i>Portal de Capacitación</h1>
+            <h1 className="font-bold flex items-center gap-3">
+                <span className="bg-white rounded-md px-2 py-1 inline-flex items-center">
+                    <Logo clase="h-7" fallback="text-blue-600 text-xl" />
+                </span>
+                Portal de Capacitación
+            </h1>
             <div className="flex items-center gap-4 text-sm">
                 <span className="hidden sm:inline text-slate-300">{sesion.user.email}</span>
                 {esAdmin && (
@@ -788,7 +907,7 @@ const Portal = ({ sesion, esAdmin, onCerrarSesion }) => (
 const Login = ({ errorDominio, onIngresar }) => (
     <div className="min-h-screen flex items-center justify-center p-6">
         <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center fade-in">
-            <div className="text-blue-600 text-5xl mb-4"><i className="fa-solid fa-building-columns"></i></div>
+            <div className="flex justify-center mb-5"><Logo clase="h-20" fallback="text-blue-600 text-5xl" /></div>
             <h1 className="text-2xl font-bold mb-2">Portal de Capacitación</h1>
             <p className="text-gray-500 mb-8">Ministerio de Ciencia, Tecnología, Conocimiento e Innovación</p>
 
