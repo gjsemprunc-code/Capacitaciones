@@ -80,11 +80,12 @@
         background-image: linear-gradient(160deg, #0a1836 0%, #14306b 50%, #1e3a8a 100%);
     }
 
-    /* Logo sobre las barras oscuras: lo convierte en silueta blanca.
-       Si tu logo ya se ve bien a color sobre fondo oscuro, borra
-       la línea del filter y quedará con sus colores originales. */
+    /* El logo institucional viene con fondo blanco incorporado.
+       Redondearlo hace que se lea como una placa intencional sobre
+       la barra oscura. Si algún día usas un PNG con fondo
+       transparente, borra este bloque completo. */
     .logo-cabecera {
-        filter: brightness(0) invert(1);
+        border-radius: 8px;
     }
 
     /* El certificado se imprime en blanco para no gastar tinta */
