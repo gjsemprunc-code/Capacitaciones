@@ -14,7 +14,7 @@
 <style>
     body {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        background-color: #aacdf2;
+        background-color: #f0f4f8;
         color: #1a202c;
     }
     .fade-in { animation: fadeIn 0.5s ease-out forwards; }
@@ -49,7 +49,7 @@
        más cerca del blanco = más suave; más saturado = más azul.
        ============================================================ */
     :root {
-        --azul-fondo:   #b4d6fa;   /* fondo general de la página */
+        --azul-fondo:   #e6eef8;   /* fondo general de la página */
         --azul-tarjeta: #f3f8fe;   /* tarjetas y paneles         */
         --azul-tenue:   #e8f0fa;   /* encabezados de tabla       */
         --azul-borde:   #d5e3f2;   /* bordes y separadores       */
@@ -74,10 +74,17 @@
 
     .certificate-bg { background-color: #f7fbff !important; }
 
-    /* Pantalla de ingreso: fondo azul institucional.
-       Para aclararlo u oscurecerlo, cambia estos tres tonos. */
+    /* Pantalla de ingreso: degradado azul oscuro.
+       Para aclararlo, sube los tres tonos (ej: #14306b → #1e3a8a). */
     .pantalla-inicio {
-        background-image: linear-gradient(160deg, #1e3a8a 0%, #2563eb 55%, #1d4ed8 100%);
+        background-image: linear-gradient(160deg, #0a1836 0%, #14306b 50%, #1e3a8a 100%);
+    }
+
+    /* Logo sobre las barras oscuras: lo convierte en silueta blanca.
+       Si tu logo ya se ve bien a color sobre fondo oscuro, borra
+       la línea del filter y quedará con sus colores originales. */
+    .logo-cabecera {
+        filter: brightness(0) invert(1);
     }
 
     /* El certificado se imprime en blanco para no gastar tinta */
@@ -869,9 +876,7 @@ const Portal = ({ sesion, esAdmin, onCerrarSesion }) => (
     <div className="min-h-screen">
         <header className="bg-slate-900 text-white px-6 py-4 flex justify-between items-center">
             <h1 className="font-bold flex items-center gap-3">
-                <span className="bg-white rounded-md px-2 py-1 inline-flex items-center">
-                    <Logo clase="h-7" fallback="text-blue-600 text-xl" />
-                </span>
+                <Logo clase="h-9 logo-cabecera" fallback="text-white text-xl" />
                 Portal de Capacitación
             </h1>
             <div className="flex items-center gap-4 text-sm">
