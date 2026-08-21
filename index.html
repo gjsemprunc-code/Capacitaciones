@@ -10,6 +10,9 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<!-- Exportación a Excel y gráficos del panel -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 
 <style>
     body {
@@ -715,6 +718,267 @@ const Curso = ({ curso, sesion }) => {
     );
 };
 
+
+// ============================================================
+// ESTADÍSTICAS
+// Calcula todos los indicadores a partir de las inscripciones y
+// los certificados ya cargados. No hace consultas adicionales.
+// ============================================================
+function calcularEstadisticas(inscripciones, certificados, cursos) {
+    const certDe = (userId, cursoId) =>
+        certificados.find(c => c.user_id === userId && c.curso_id === cursoId);
+
+    let aprobados = 0, reprobados = 0, enCurso = 0, sumaPuntajes = 0, conPuntaje = 0;
+    const porCurso = {};
+    const porMes = {};
+
+    inscripciones.forEach(i => {
+        const cert = certDe(i.user_id, i.curso_id);
+
+        if (!porCurso[i.curso_id]) {
+            porCurso[i.curso_id] = { inscritos: 0, aprobados: 0, reprobados: 0, enCurso: 0, suma: 0, con: 0 };
+        }
+        const pc = porCurso[i.curso_id];
+        pc.inscritos++;
+
+        if (!cert) { enCurso++; pc.enCurso++; }
+        else if (cert.aprobado) { aprobados++; pc.aprobados++; }
+        else { reprobados++; pc.reprobados++; }
+
+        if (cert && typeof cert.puntaje === "number") {
+            sumaPuntajes += cert.puntaje; conPuntaje++;
+            pc.suma += cert.puntaje; pc.con++;
+        }
+
+        if (i.iniciado_en) {
+            const d = new Date(i.iniciado_en);
+            const clave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+            porMes[clave] = (porMes[clave] || 0) + 1;
+        }
+    });
+
+    const evaluados = aprobados + reprobados;
+
+    return {
+        total: inscripciones.length,
+        aprobados, reprobados, enCurso, evaluados,
+        tasaAprobacion: evaluados ? Math.round((aprobados / evaluados) * 100) : 0,
+        promedio: conPuntaje ? Math.round(sumaPuntajes / conPuntaje) : 0,
+        porCurso,
+        porMes: Object.keys(porMes).sort().map(k => ({ mes: k, cantidad: porMes[k] }))
+    };
+}
+
+// ============================================================
+// GRÁFICO
+// Envuelve Chart.js. Se redibuja cuando cambian los datos y se
+// destruye al desmontarse, para no dejar lienzos huérfanos.
+// ============================================================
+const Grafico = ({ tipo, datos, opciones, alto = 260 }) => {
+    const ref = useRef(null);
+    const instancia = useRef(null);
+
+    useEffect(() => {
+        if (!ref.current || !window.Chart) return;
+        if (instancia.current) instancia.current.destroy();
+        instancia.current = new window.Chart(ref.current, {
+            type: tipo,
+            data: datos,
+            options: Object.assign({
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } }
+            }, opciones || {})
+        });
+        return () => { if (instancia.current) instancia.current.destroy(); };
+    }, [tipo, JSON.stringify(datos), JSON.stringify(opciones)]);
+
+    return <div style={{ height: alto }}><canvas ref={ref}></canvas></div>;
+};
+
+const Indicador = ({ etiqueta, valor, sufijo, icono, color }) => (
+    <div className="bg-white rounded-2xl shadow-md p-5">
+        <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{etiqueta}</span>
+            <i className={`fa-solid ${icono} ${color}`}></i>
+        </div>
+        <p className="text-3xl font-black text-gray-800">{valor}<span className="text-lg text-gray-400">{sufijo || ""}</span></p>
+    </div>
+);
+
+// ============================================================
+// DASHBOARD
+// ============================================================
+const Dashboard = ({ inscripciones, certificados, cursos }) => {
+    const e = calcularEstadisticas(inscripciones, certificados, cursos);
+    const nombreCurso = (id) => { const c = cursos.find(c => c.id === id); return c ? c.titulo : id; };
+
+    if (e.total === 0) {
+        return (
+            <div className="bg-white rounded-2xl shadow-md p-10 text-center text-gray-400 mt-8">
+                <i className="fa-solid fa-chart-simple text-3xl mb-3 block"></i>
+                El dashboard se activa cuando haya inscripciones registradas.
+            </div>
+        );
+    }
+
+    const ids = Object.keys(e.porCurso);
+    const etiquetasCorto = ids.map(id => {
+        const t = nombreCurso(id);
+        return t.length > 28 ? t.slice(0, 28) + "…" : t;
+    });
+
+    const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+
+    return (
+        <div className="mt-10">
+            <h2 className="text-2xl font-bold text-gray-800 mb-1">Dashboard</h2>
+            <p className="text-gray-500 text-sm mb-6">Refleja el filtro de curso seleccionado arriba.</p>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <Indicador etiqueta="Inscritos" valor={e.total} icono="fa-users" color="text-blue-500" />
+                <Indicador etiqueta="Aprobados" valor={e.aprobados} icono="fa-circle-check" color="text-green-500" />
+                <Indicador etiqueta="Aprobación" valor={e.tasaAprobacion} sufijo="%" icono="fa-percent" color="text-violet-500" />
+                <Indicador etiqueta="Puntaje promedio" valor={e.promedio} sufijo="%" icono="fa-star" color="text-amber-500" />
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-6">
+                <div className="bg-white rounded-2xl shadow-md p-6">
+                    <h3 className="font-bold text-gray-700 mb-4 text-sm uppercase tracking-wide">Estado general</h3>
+                    <Grafico
+                        tipo="doughnut"
+                        alto={240}
+                        datos={{
+                            labels: ["Aprobados", "Reprobados", "En curso"],
+                            datasets: [{
+                                data: [e.aprobados, e.reprobados, e.enCurso],
+                                backgroundColor: ["#16a34a", "#dc2626", "#cbd5e1"],
+                                borderWidth: 0
+                            }]
+                        }}
+                        opciones={{ cutout: "62%", plugins: { legend: { position: "bottom" } } }}
+                    />
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-md p-6">
+                    <h3 className="font-bold text-gray-700 mb-4 text-sm uppercase tracking-wide">Resultados por curso</h3>
+                    <Grafico
+                        tipo="bar"
+                        alto={240}
+                        datos={{
+                            labels: etiquetasCorto,
+                            datasets: [
+                                { label: "Aprobados",  data: ids.map(id => e.porCurso[id].aprobados),  backgroundColor: "#16a34a" },
+                                { label: "Reprobados", data: ids.map(id => e.porCurso[id].reprobados), backgroundColor: "#dc2626" },
+                                { label: "En curso",   data: ids.map(id => e.porCurso[id].enCurso),    backgroundColor: "#cbd5e1" }
+                            ]
+                        }}
+                        opciones={{
+                            scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } },
+                            plugins: { legend: { position: "bottom" } }
+                        }}
+                    />
+                </div>
+
+                <div className="bg-white rounded-2xl shadow-md p-6 lg:col-span-2">
+                    <h3 className="font-bold text-gray-700 mb-4 text-sm uppercase tracking-wide">Inscripciones por mes</h3>
+                    <Grafico
+                        tipo="line"
+                        alto={220}
+                        datos={{
+                            labels: e.porMes.map(m => {
+                                const [a, mm] = m.mes.split("-");
+                                return `${MESES[parseInt(mm, 10) - 1]} ${a.slice(2)}`;
+                            }),
+                            datasets: [{
+                                label: "Inscripciones",
+                                data: e.porMes.map(m => m.cantidad),
+                                borderColor: "#2563eb",
+                                backgroundColor: "rgba(37,99,235,0.12)",
+                                fill: true,
+                                tension: 0.3,
+                                pointRadius: 4
+                            }]
+                        }}
+                        opciones={{ scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } }}
+                    />
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ============================================================
+// EXPORTACIÓN A EXCEL
+// Genera un libro con tres hojas:
+//   Inscritos  → el detalle, una fila por persona y curso
+//   Resumen    → conteos por curso, listos para graficar
+//   Indicadores→ los totales del dashboard
+// ============================================================
+function exportarExcel(inscripciones, certificados, cursos, etiquetaFiltro) {
+    const nombreCurso = (id) => { const c = cursos.find(c => c.id === id); return c ? c.titulo : id; };
+    const certDe = (userId, cursoId) => certificados.find(c => c.user_id === userId && c.curso_id === cursoId);
+    const e = calcularEstadisticas(inscripciones, certificados, cursos);
+
+    // --- Hoja 1: detalle ---
+    const detalle = inscripciones.map(i => {
+        const cert = certDe(i.user_id, i.curso_id);
+        return {
+            "Nombre": i.nombre || "",
+            "Correo": i.email || "",
+            "RUT": i.rut || "",
+            "Curso": nombreCurso(i.curso_id),
+            "Fecha de inscripción": i.iniciado_en ? new Date(i.iniciado_en).toLocaleDateString("es-CL") : "",
+            "Estado": !cert ? "En curso" : (cert.aprobado ? "Aprobado" : "Reprobado"),
+            "Puntaje (%)": cert && typeof cert.puntaje === "number" ? cert.puntaje : "",
+            "Fecha de evaluación": cert && cert.emitido_en ? new Date(cert.emitido_en).toLocaleDateString("es-CL") : ""
+        };
+    });
+
+    const hoja1 = XLSX.utils.json_to_sheet(detalle);
+    hoja1["!cols"] = [{ wch: 30 }, { wch: 34 }, { wch: 13 }, { wch: 42 }, { wch: 19 }, { wch: 12 }, { wch: 12 }, { wch: 19 }];
+    if (detalle.length) hoja1["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: detalle.length, c: 7 } }) };
+
+    // --- Hoja 2: resumen por curso (base del gráfico) ---
+    const resumen = Object.keys(e.porCurso).map(id => {
+        const p = e.porCurso[id];
+        const evaluados = p.aprobados + p.reprobados;
+        return {
+            "Curso": nombreCurso(id),
+            "Inscritos": p.inscritos,
+            "Aprobados": p.aprobados,
+            "Reprobados": p.reprobados,
+            "En curso": p.enCurso,
+            "% de aprobación": evaluados ? Math.round((p.aprobados / evaluados) * 100) : 0,
+            "Puntaje promedio": p.con ? Math.round(p.suma / p.con) : 0
+        };
+    });
+    const hoja2 = XLSX.utils.json_to_sheet(resumen);
+    hoja2["!cols"] = [{ wch: 44 }, { wch: 11 }, { wch: 11 }, { wch: 12 }, { wch: 11 }, { wch: 16 }, { wch: 17 }];
+
+    // --- Hoja 3: indicadores generales ---
+    const indicadores = [
+        { "Indicador": "Total de inscritos", "Valor": e.total },
+        { "Indicador": "Aprobados", "Valor": e.aprobados },
+        { "Indicador": "Reprobados", "Valor": e.reprobados },
+        { "Indicador": "En curso (sin evaluar)", "Valor": e.enCurso },
+        { "Indicador": "Tasa de aprobación (%)", "Valor": e.tasaAprobacion },
+        { "Indicador": "Puntaje promedio (%)", "Valor": e.promedio },
+        { "Indicador": "Filtro aplicado", "Valor": etiquetaFiltro },
+        { "Indicador": "Generado el", "Valor": new Date().toLocaleString("es-CL") }
+    ];
+    const hoja3 = XLSX.utils.json_to_sheet(indicadores);
+    hoja3["!cols"] = [{ wch: 26 }, { wch: 24 }];
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja1, "Inscritos");
+    XLSX.utils.book_append_sheet(libro, hoja2, "Resumen");
+    XLSX.utils.book_append_sheet(libro, hoja3, "Indicadores");
+
+    const hoy = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(libro, `capacitaciones-${hoy}.xlsx`);
+}
+
 // ============================================================
 // FORMULARIO DE CURSO (solo administradores)
 // ============================================================
@@ -1005,10 +1269,21 @@ const PanelAdmin = ({ sesion, esAdmin, cursos, recargarCursos }) => {
                     <>
                         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
                             <h2 className="text-2xl font-bold text-gray-800">Inscritos y certificados</h2>
-                            <select value={filtroCurso} onChange={e => setFiltroCurso(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                                <option value="todos">Todos los cursos</option>
-                                {cursosConDatos.map(id => <option key={id} value={id}>{nombreCurso(id)}</option>)}
-                            </select>
+                            <div className="flex flex-wrap items-center gap-3">
+                                <select value={filtroCurso} onChange={e => setFiltroCurso(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                    <option value="todos">Todos los cursos</option>
+                                    {cursosConDatos.map(id => <option key={id} value={id}>{nombreCurso(id)}</option>)}
+                                </select>
+                                <button
+                                    onClick={() => exportarExcel(
+                                        inscFiltradas, certificados, cursos,
+                                        filtroCurso === "todos" ? "Todos los cursos" : nombreCurso(filtroCurso)
+                                    )}
+                                    disabled={inscFiltradas.length === 0}
+                                    className="bg-green-700 hover:bg-green-800 text-white px-4 py-2 rounded-lg font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed">
+                                    <i className="fa-solid fa-file-excel mr-2"></i>Exportar a Excel
+                                </button>
+                            </div>
                         </div>
                         <div className="bg-white rounded-2xl shadow-md overflow-x-auto">
                             <table className="w-full text-sm">
@@ -1047,6 +1322,8 @@ const PanelAdmin = ({ sesion, esAdmin, cursos, recargarCursos }) => {
                                 </tbody>
                             </table>
                         </div>
+
+                        <Dashboard inscripciones={inscFiltradas} certificados={certificados} cursos={cursos} />
                     </>
                 )}
 
